@@ -1,0 +1,65 @@
+---
+- name: Linux Service Management & Monitoring
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Get systemd service status
+      shell: systemctl list-units --type=service --state=running --no-pager | grep -E "\.service" | awk '{print $1}' | head -30
+      register: running_services
+      changed_when: false
+    
+    - name: Check failed services
+      shell: systemctl list-units --type=service --state=failed --no-pager | grep -E "\.service" || echo "No failed services"
+      register: failed_services
+      changed_when: false
+    
+    - name: Get enabled services
+      shell: systemctl list-unit-files --type=service --state=enabled | grep "enabled" | head -20 | awk '{print $1}'
+      register: enabled_services
+      changed_when: false
+    
+    - name: Check specific critical services
+      shell: |
+        for service in ssh sshd apache2 nginx mysql postgresql docker; do
+          systemctl is-active --quiet $service && echo "$service: RUNNING" || echo "$service: STOPPED"
+        done 2>/dev/null || true
+      register: critical_services
+      changed_when: false
+    
+    - name: Check service restart history
+      shell: journalctl _SYSTEMD_UNIT=ssh.service -n 10 --no-pager | grep "Started\|Stopped" | tail -5 || echo "No recent changes"
+      register: service_history
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Get listening ports and services
+      shell: |
+        netstat -tlnp 2>/dev/null | grep LISTEN | awk '{print $4, $7}' || ss -tlnp 2>/dev/null | grep LISTEN | awk '{print $4, $7}'
+      register: listening_services
+      changed_when: false
+    
+    - name: Display service management report
+      debug:
+        msg: |
+          ========== SERVICE MANAGEMENT REPORT ==========
+          Host: {{ inventory_hostname }}
+          
+          ‚úÖ Running Services (top 30):
+          {{ running_services.stdout }}
+          
+          ‚ùå Failed Services:
+          {{ failed_services.stdout }}
+          
+          Ì¥ß Enabled Services (sample):
+          {{ enabled_services.stdout }}
+          
+          ÌæØ Critical Services Status:
+          {{ critical_services.stdout }}
+          
+          Ì≥ö Recent Service Changes:
+          {{ service_history.stdout }}
+          
+          Ì¥å Listening Ports & Services:
+          {{ listening_services.stdout }}
+

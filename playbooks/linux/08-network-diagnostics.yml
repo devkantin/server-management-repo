@@ -1,0 +1,71 @@
+---
+- name: Linux Network Diagnostics
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Get network interfaces
+      shell: ip link show | grep "^[0-9]" | awk '{print $2, $9}' | grep -v loopback
+      register: network_interfaces
+      changed_when: false
+    
+    - name: Get IP addresses
+      shell: ip addr show | grep -E "inet " | awk '{print $7, $2}'
+      register: ip_addresses
+      changed_when: false
+    
+    - name: Check DNS configuration
+      shell: cat /etc/resolv.conf 2>/dev/null | grep -E "^nameserver" || echo "Using systemd-resolved"
+      register: dns_config
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check network connectivity (DNS resolution)
+      shell: nslookup google.com 2>&1 | head -5 || echo "DNS resolution failed"
+      register: dns_resolution
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Get routing table
+      shell: ip route show
+      register: routing_table
+      changed_when: false
+    
+    - name: Check active connections
+      shell: |
+        netstat -an 2>/dev/null | grep ESTABLISHED | wc -l || ss -an | grep ESTABLISHED | wc -l
+      register: active_connections
+      changed_when: false
+    
+    - name: Check network packet statistics
+      shell: ip -s link show 2>/dev/null | grep -A1 "RX\|TX" || echo "Stats unavailable"
+      register: packet_stats
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Display network diagnostics report
+      debug:
+        msg: |
+          ========== NETWORK DIAGNOSTICS REPORT ==========
+          Host: {{ inventory_hostname }}
+          
+          Ìºê Network Interfaces:
+          {{ network_interfaces.stdout }}
+          
+          Ì≥ç IP Addresses:
+          {{ ip_addresses.stdout }}
+          
+          Ì¥é DNS Configuration:
+          {{ dns_config.stdout }}
+          
+          ‚úÖ DNS Resolution Test:
+          {{ dns_resolution.stdout }}
+          
+          Ìª£Ô∏è Routing Table:
+          {{ routing_table.stdout }}
+          
+          Ì¥ó Active Connections: {{ active_connections.stdout }}
+          
+          Ì≥ä Network Statistics:
+          {{ packet_stats.stdout | default('N/A') }}
+

@@ -1,0 +1,100 @@
+---
+- name: Daily Linux System Health Check
+  hosts: linux_servers
+  gather_facts: yes
+  vars:
+    cpu_threshold: 80
+    memory_threshold: 85
+    disk_threshold: 85
+  
+  tasks:
+    - name: Get current date
+      set_fact:
+        current_date: "{{ ansible_date_time.iso8601_basic_short }}"
+    
+    - name: Collect CPU usage
+      shell: |
+        top -bn1 | grep "Cpu(s)" | awk '{print 100 - $8}'
+      register: cpu_usage
+      changed_when: false
+    
+    - name: Get memory usage
+      shell: |
+        free | grep Mem | awk '{printf("%.2f", ($3/$2) * 100)}'
+      register: memory_usage
+      changed_when: false
+    
+    - name: Get disk usage (root partition)
+      shell: |
+        df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage
+      changed_when: false
+    
+    - name: Check load average
+      set_fact:
+        load_avg: "{{ ansible_loadavg }}"
+    
+    - name: List top 5 processes by memory
+      shell: |
+        ps aux --sort=-%mem | head -6 | tail -5 | awk '{print $2, $4, $11}'
+      register: top_processes
+      changed_when: false
+    
+    - name: Check system uptime
+      shell: uptime -p
+      register: uptime
+      changed_when: false
+    
+    - name: Alert on high CPU usage
+      debug:
+        msg: "⚠️ WARNING: CPU usage is {{ cpu_usage.stdout }}% - exceeds threshold of {{ cpu_threshold }}%"
+      when: cpu_usage.stdout | float > cpu_threshold
+    
+    - name: Alert on high memory usage
+      debug:
+        msg: "⚠️ WARNING: Memory usage is {{ memory_usage.stdout }}% - exceeds threshold of {{ memory_threshold }}%"
+      when: memory_usage.stdout | float > memory_threshold
+    
+    - name: Alert on high disk usage
+      debug:
+        msg: "⚠️ WARNING: Disk usage is {{ disk_usage.stdout }}% - exceeds threshold of {{ disk_threshold }}%"
+      when: disk_usage.stdout | float > disk_threshold
+    
+    - name: Display system health report
+      debug:
+        msg: |
+          ========== SYSTEM HEALTH REPORT ==========
+          Host: {{ inventory_hostname }}
+          Date: {{ current_date }}
+          
+          ��� RESOURCE USAGE:
+          • CPU Usage: {{ cpu_usage.stdout }}%
+          • Memory Usage: {{ memory_usage.stdout }}%
+          • Disk Usage (Root): {{ disk_usage.stdout }}%
+          • Load Average: {{ load_avg[0] }}, {{ load_avg[1] }}, {{ load_avg[2] }}
+          • System Uptime: {{ uptime.stdout }}
+          
+          ��� TOP PROCESSES BY MEMORY:
+          {{ top_processes.stdout }}
+          
+          ✅ Kernel: {{ ansible_kernel }}
+          ✅ OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          ✅ CPU Cores: {{ ansible_processor_vcpus }}
+          ✅ Total Memory: {{ ansible_memtotal_mb }} MB
+
+    - name: Create health report file
+      copy:
+        content: |
+          System Health Report - {{ current_date }}
+          Host: {{ inventory_hostname }}
+          
+          CPU Usage: {{ cpu_usage.stdout }}%
+          Memory Usage: {{ memory_usage.stdout }}%
+          Disk Usage: {{ disk_usage.stdout }}%
+          Load Average: {{ load_avg[0] }}, {{ load_avg[1] }}, {{ load_avg[2] }}
+          Uptime: {{ uptime.stdout }}
+          
+          Top Processes:
+          {{ top_processes.stdout }}
+        dest: "/tmp/health_report_{{ current_date }}.txt"
+      when: inventory_hostname is defined

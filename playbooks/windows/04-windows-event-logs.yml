@@ -1,0 +1,71 @@
+---
+- name: Windows Event Logs Analysis
+  hosts: windows_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Get recent error events
+      win_shell: |
+        Get-EventLog -LogName System -EntryType Error -Newest 10 | 
+        Select-Object TimeGenerated, Source, EventID, Message | 
+        Format-Table -AutoSize
+      register: system_errors
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Get critical events
+      win_shell: |
+        Get-EventLog -LogName System -EntryType Warning -Newest 15 | 
+        Select-Object TimeGenerated, Source, EventID | 
+        Format-Table -AutoSize
+      register: system_warnings
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check Application event log
+      win_shell: |
+        Get-EventLog -LogName Application -Newest 10 -EntryType Error | 
+        Select-Object TimeGenerated, Source, Message | 
+        Format-Table -AutoSize
+      register: app_errors
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check Security event log for failed logins
+      win_shell: |
+        Get-EventLog -LogName Security -InstanceId 4625 -Newest 5 | 
+        Select-Object TimeGenerated, Message | 
+        Format-Table -AutoSize
+      register: failed_logins
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Get event log size info
+      win_shell: |
+        Get-EventLog -List | 
+        Select-Object Log, Entries, @{N='MaxKB';E={$_.MaximumKilobytes}}, 
+                      @{N='PercentFull';E={[Math]::Round(($_.Entries / ($_.MaximumKilobytes / 64)) * 100, 2)}} | 
+        Format-Table -AutoSize
+      register: eventlog_sizes
+      changed_when: false
+    
+    - name: Display event logs report
+      debug:
+        msg: |
+          ========== WINDOWS EVENT LOGS REPORT ==========
+          
+          ‚ùå Recent System Errors:
+          {{ system_errors.stdout | default('None') }}
+          
+          ‚ö†Ô∏è Recent System Warnings:
+          {{ system_warnings.stdout | default('None') }}
+          
+          Ì¥¥ Application Errors:
+          {{ app_errors.stdout | default('None') }}
+          
+          Ì∫´ Failed Login Events:
+          {{ failed_logins.stdout | default('None') }}
+          
+          Ì≥ä Event Log Sizes:
+          {{ eventlog_sizes.stdout }}
+

@@ -1,0 +1,62 @@
+---
+- name: Linux Patch Management & Updates
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if updates are available
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      register: apt_cache_update
+      changed_when: false
+    
+    - name: List available security updates (Ubuntu/Debian)
+      shell: apt list --upgradable 2>/dev/null | grep -i security || true
+      register: security_updates_debian
+      changed_when: false
+      when: ansible_os_family == "Debian"
+    
+    - name: Check available updates (RHEL/CentOS)
+      shell: yum check-update 2>/dev/null | head -20 || true
+      register: available_updates_rhel
+      changed_when: false
+      when: ansible_os_family == "RedHat"
+    
+    - name: Generate update report
+      debug:
+        msg: |
+          ========== UPDATE STATUS REPORT ==========
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          
+          Security Updates Available:
+          {% if ansible_os_family == "Debian" %}
+            {{ security_updates_debian.stdout | default('None') }}
+          {% else %}
+            {{ available_updates_rhel.stdout | default('None') }}
+          {% endif %}
+    
+    - name: Read kernel info
+      shell: uname -r
+      register: current_kernel
+      changed_when: false
+    
+    - name: Display kernel information
+      debug:
+        msg: |
+          Current Kernel: {{ current_kernel.stdout }}
+          Kernel Version: {{ ansible_kernel }}
+    
+    - name: Check for held packages
+      shell: apt-mark showhold 2>/dev/null || echo "No held packages"
+      register: held_packages
+      when: ansible_os_family == "Debian"
+      changed_when: false
+    
+    - name: Display held packages
+      debug:
+        msg: "Held Packages: {{ held_packages.stdout }}"
+      when: ansible_os_family == "Debian"
+

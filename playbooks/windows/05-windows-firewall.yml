@@ -1,0 +1,56 @@
+---
+- name: Windows Firewall Analysis
+  hosts: windows_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check firewall status
+      win_shell: |
+        Get-NetFirewallProfile | 
+        Select-Object Name, Enabled | 
+        Format-Table -AutoSize
+      register: firewall_status
+      changed_when: false
+    
+    - name: Get firewall rules summary
+      win_shell: |
+        $inbound = (Get-NetFirewallRule -Direction Inbound | Measure-Object).Count
+        $outbound = (Get-NetFirewallRule -Direction Outbound | Measure-Object).Count
+        "Inbound Rules: $inbound`r`nOutbound Rules: $outbound"
+      register: firewall_rules_count
+      changed_when: false
+    
+    - name: Get disabled firewall rules
+      win_shell: |
+        Get-NetFirewallRule -Enabled $false | 
+        Select-Object Name, Direction, Enabled | 
+        Format-Table -AutoSize | 
+        Head -20
+      register: disabled_rules
+      changed_when: false
+    
+    - name: Get open ports
+      win_shell: |
+        Get-NetTCPConnection -State Listen | 
+        Select-Object LocalAddress, LocalPort, OwningProcess | 
+        Format-Table -AutoSize
+      register: open_ports
+      changed_when: false
+    
+    - name: Display firewall report
+      debug:
+        msg: |
+          ========== WINDOWS FIREWALL REPORT ==========
+          
+          Ì¥• Firewall Status:
+          {{ firewall_status.stdout }}
+          
+          Ì≥ä Firewall Rules Summary:
+          {{ firewall_rules_count.stdout }}
+          
+          ‚ö†Ô∏è Disabled Rules (sample):
+          {{ disabled_rules.stdout | default('None') }}
+          
+          Ì¥å Open Ports:
+          {{ open_ports.stdout }}
+

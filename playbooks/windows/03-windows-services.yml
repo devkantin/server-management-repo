@@ -1,0 +1,56 @@
+---
+- name: Windows Services Management
+  hosts: windows_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Get critical running services
+      win_shell: |
+        $critical = @("WinRM", "BITS", "RpcSs", "DcomLaunch", "Spooler", "W3SVC", "MSSQLSERVER", "MySQL", "sshd")
+        Get-Service | Where-Object {$_.Name -in $critical} | 
+        Select-Object Name, Status, StartType | 
+        Format-Table -AutoSize
+      register: critical_services
+      changed_when: false
+    
+    - name: Check for stopped critical services
+      win_shell: |
+        $critical = @("WinRM", "BITS", "RpcSs", "DcomLaunch")
+        Get-Service | Where-Object {$_.Name -in $critical -and $_.Status -ne "Running"} | 
+        Select-Object Name, Status
+      register: stopped_services
+      changed_when: false
+    
+    - name: Get all running services count
+      win_shell: |
+        $runningCount = (Get-Service | Where-Object {$_.Status -eq "Running"} | Measure-Object).Count
+        $stoppedCount = (Get-Service | Where-Object {$_.Status -eq "Stopped"} | Measure-Object).Count
+        "Running Services: $runningCount`r`nStopped Services: $stoppedCount"
+      register: services_summary
+      changed_when: false
+    
+    - name: Check for disabled services
+      win_shell: |
+        Get-Service | Where-Object {$_.StartType -eq "Disabled"} | 
+        Select-Object Name, Status, StartType | 
+        Format-Table -AutoSize
+      register: disabled_services
+      changed_when: false
+    
+    - name: Display Windows services report
+      debug:
+        msg: |
+          ========== WINDOWS SERVICES REPORT ==========
+          
+          ‚úÖ Critical Services Status:
+          {{ critical_services.stdout }}
+          
+          ‚ö†Ô∏è Stopped Critical Services:
+          {{ stopped_services.stdout | default('None') }}
+          
+          Ì≥ä Services Summary:
+          {{ services_summary.stdout }}
+          
+          Ì∫´ Disabled Services:
+          {{ disabled_services.stdout | default('None') }}
+

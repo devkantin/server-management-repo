@@ -1,0 +1,70 @@
+---
+- name: Windows Updates Management
+  hosts: windows_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check Windows Update status
+      win_shell: |
+        $update = Get-WmiObject -Class CCM_Service -ComputerName . -Namespace root\ccm | Select-Object -ExpandProperty Name
+        if ($update -like "*none*") {
+          "Windows Update Service: Can not determine status"
+        } else {
+          $searcher = New-Object -ComObject Microsoft.Update.Searcher
+          $searchResult = $searcher.Search("IsInstalled=0")
+          "Updates Available: " + $searchResult.Updates.Count
+        }
+      register: update_status
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check for pending reboots
+      win_shell: |
+        $rebootRequired = $false
+        if (Test-Path "HKLM:\System\CurrentControlSet\Control\Session Manager" | Where-Object {(Get-ItemProperty -Path $_ -Name PendingFileRenameOperations -ErrorAction SilentlyContinue) -ne $null}) {
+          $rebootRequired = $true
+        }
+        if ((Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update" | Select-Object -ExpandProperty RebootRequired -ErrorAction SilentlyContinue) -eq 1) {
+          $rebootRequired = $true
+        }
+        "Reboot Required: $rebootRequired"
+      register: reboot_status
+      changed_when: false
+    
+    - name: Get Windows Update history
+      win_shell: |
+        Get-WmiObject -Class Win32_QuickFixEngineering | 
+        Select-Object -First 10 -Property Description, HotFixID, InstalledOn | 
+        Sort-Object InstalledOn -Descending | 
+        Format-Table -AutoSize
+      register: update_history
+      changed_when: false
+    
+    - name: Check WSUS status
+      win_shell: |
+        $wsus = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate" -Name "WUServer" -ErrorAction SilentlyContinue
+        if ($wsus) {
+          "WSUS Configured: $($wsus.WUServer)"
+        } else {
+          "WSUS: Not Configured (Using Windows Update)"
+        }
+      register: wsus_status
+      changed_when: false
+    
+    - name: Display Windows updates report
+      debug:
+        msg: |
+          ========== WINDOWS UPDATES REPORT ==========
+          
+          Ì≥• Update Status:
+          {{ update_status.stdout | default('Unable to determine') }}
+          
+          Ì¥Ñ Reboot Status:
+          {{ reboot_status.stdout }}
+          
+          Ì≥ã Recent Updates:
+          {{ update_history.stdout }}
+          
+          Ì∂•Ô∏è WSUS Status:
+          {{ wsus_status.stdout }}
+

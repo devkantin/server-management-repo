@@ -1,0 +1,42 @@
+---
+- name: Cloud Infrastructure Health Dashboard
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Generate comprehensive health dashboard
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║        CLOUD INFRASTRUCTURE HEALTH DASHBOARD                   ║
+          ║        Generated: {{ ansible_date_time.iso8601_basic_short }}          ║
+          ╚════════════════════════════════════════════════════════════════╝
+          
+          HOST INFORMATION:
+          ├─ Hostname: {{ inventory_hostname }}
+          ├─ OS: {{ ansible_os_family | default('N/A') }} {{ ansible_distribution | default('N/A') }} {{ ansible_distribution_version | default('N/A') }}
+          ├─ Kernel: {{ ansible_kernel | default('N/A') }}
+          ├─ Architecture: {{ ansible_machine | default('N/A') }}
+          └─ Environment: {{ environment | default('production') }}
+          
+          NETWORK STATUS:
+          ├─ Default IPv4: {{ ansible_default_ipv4.address | default('N/A') }}
+          ├─ FQDN: {{ ansible_fqdn | default('N/A') }}
+          ├─ Number of Network Interfaces: {{ ansible_interfaces | length | default('N/A') }}
+          └─ All IPs: {{ ansible_all_ipv4_addresses | join(', ') | default('N/A') }}
+          
+          HARDWARE:
+          ├─ CPU Cores: {{ ansible_processor_vcpus | default('N/A') }}
+          ├─ Total Memory: {{ (ansible_memtotal_mb / 1024) | round(2) | default('N/A') }} GB
+          ├─ Disk Count: {{ ansible_devices | length | default('N/A') }}
+          └─ Virtualization Type: {{ ansible_virtualization_type | default('N/A') }}
+          
+          ANSIBLE FACTS:
+          ├─ Python Version: {{ ansible_python_version | default('N/A') }}
+          ├─ Ansible Connection: {{ ansible_connection | default('N/A') }}
+          ├─ User: {{ ansible_user_id | default('N/A') }}
+          └─ System: {{ ansible_system | default('N/A') }} {{ ansible_system_release | default('') }}
+          
+          STATUS: ✅ Connected & Responsive
+          ═══════════════════════════════════════════════════════════════════
+

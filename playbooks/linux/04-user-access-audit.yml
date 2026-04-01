@@ -1,0 +1,72 @@
+---
+- name: Linux User Access Audit
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Get active user sessions
+      shell: who | awk '{print $1, $3, $4, $5}' | sort -u
+      register: active_users
+      changed_when: false
+    
+    - name: Get system users
+      shell: getent passwd | awk -F: '$3 >= 1000 {print $1, $3}' | head -20
+      register: system_users
+      changed_when: false
+    
+    - name: Check sudo access
+      shell: getent group sudo 2>/dev/null | awk -F: '{print $4}' || getent group wheel | awk -F: '{print $4}'
+      register: sudo_users
+      changed_when: false
+    
+    - name: Get password policy
+      shell: cat /etc/login.defs | grep -E "PASS_MAX_DAYS|PASS_MIN_DAYS|PASS_WARN_AGE"
+      register: password_policy
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check for accounts with no password
+      shell: awk -F: '($2 == "" ) {print $1}' /etc/shadow 2>/dev/null || echo "None"
+      register: no_password_accounts
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check failed SSH attempts
+      shell: grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | tail -5 || echo "No recent failures"
+      register: ssh_failures
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: List SSH key-based auth users
+      shell: for user in $(getent passwd | awk -F: '$3 >= 1000 {print $1}'); do if [ -d /home/$user/.ssh ]; then echo $user; fi; done
+      register: ssh_users
+      changed_when: false
+    
+    - name: Display user access audit report
+      debug:
+        msg: |
+          ========== USER ACCESS AUDIT REPORT ==========
+          Host: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601_basic_short }}
+          
+          Ì±§ Currently Active Users:
+          {{ active_users.stdout }}
+          
+          Ì±• System Users (UID >= 1000):
+          {{ system_users.stdout }}
+          
+          Ì¥ë Sudo Privileged Users:
+          {{ sudo_users.stdout }}
+          
+          Ìª°Ô∏è Password Policy:
+          {{ password_policy.stdout }}
+          
+          ‚ö†Ô∏è Accounts with No Password:
+          {{ no_password_accounts.stdout }}
+          
+          ‚ùå Recent Failed SSH Attempts:
+          {{ ssh_failures.stdout }}
+          
+          Ì¥ê SSH Key-based Users:
+          {{ ssh_users.stdout }}
+

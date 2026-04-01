@@ -1,0 +1,78 @@
+---
+- name: Linux Log Analysis & Management
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check syslog for errors in past 24 hours
+      shell: |
+        tail -n 1000 /var/log/syslog 2>/dev/null | grep -i "error\|critical" | tail -10 || echo "No errors found"
+      register: syslog_errors
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check auth.log for failed logins
+      shell: |
+        tail -n 500 /var/log/auth.log 2>/dev/null | grep "Failed password" | tail -10 || echo "No failed logins"
+      register: failed_logins
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check for OOM killer events
+      shell: |
+        grep -i "Out of memory" /var/log/syslog 2>/dev/null | tail -5 || echo "No OOM events"
+      register: oom_events
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Get log file sizes
+      shell: |
+        du -sh /var/log/* 2>/dev/null | sort -rh | head -10
+      register: log_sizes
+      changed_when: false
+    
+    - name: Check log rotation status
+      shell: |
+        stat /etc/logrotate.d/* 2>/dev/null | grep "File:" | wc -l
+      register: logrotate_configs
+      changed_when: false
+    
+    - name: Display log analysis report
+      debug:
+        msg: |
+          ========== LOG ANALYSIS REPORT ==========
+          Host: {{ inventory_hostname }}
+          
+          í´´ Recent Errors (past 24h):
+          {{ syslog_errors.stdout }}
+          
+          íº« Failed Login Attempts:
+          {{ failed_logins.stdout }}
+          
+          í²¥ OOM Events:
+          {{ oom_events.stdout }}
+          
+          í³Š Top 10 Log Files (by size):
+          {{ log_sizes.stdout }}
+          
+          í´§ Logrotate Configs: {{ logrotate_configs.stdout }}
+    
+    - name: Create log analysis report file
+      copy:
+        content: |
+          Log Analysis Report - {{ ansible_date_time.iso8601_basic_short }}
+          Host: {{ inventory_hostname }}
+          
+          Recent Errors:
+          {{ syslog_errors.stdout }}
+          
+          Failed Logins:
+          {{ failed_logins.stdout }}
+          
+          OOM Events:
+          {{ oom_events.stdout }}
+          
+          Top Log Files:
+          {{ log_sizes.stdout }}
+        dest: "/tmp/log_analysis_{{ ansible_date_time.iso8601_basic_short }}.txt"
+

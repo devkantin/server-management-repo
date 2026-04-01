@@ -1,0 +1,75 @@
+---
+- name: Linux Security Audit
+  hosts: linux_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check firewall status
+      shell: |
+        if command -v ufw &> /dev/null; then ufw status; elif command -v firewall-cmd &> /dev/null; then firewall-cmd --list-all; else echo "No firewall command found"; fi
+      register: firewall_status
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check SSH configuration
+      shell: grep -E "^Port|^PermitRootLogin|^PasswordAuthentication" /etc/ssh/sshd_config
+      register: ssh_config
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check SUID binaries
+      shell: find / -perm /4000 -type f 2>/dev/null | head -20
+      register: suid_binaries
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check for world-writable files
+      shell: find / -xdev -type f -perm -002 2>/dev/null | head -20 || echo "None found"
+      register: world_writable
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check file permissions for critical files
+      shell: |
+        ls -la /etc/passwd /etc/shadow /etc/group /etc/sudoers 2>/dev/null | awk '{print $1, $9}'
+      register: critical_perms
+      changed_when: false
+      ignore_errors: yes
+    
+    - name: Check for rootkits (chkrootkit if available)
+      shell: which chkrootkit &>/dev/null && echo "chkrootkit: INSTALLED" || echo "chkrootkit: NOT INSTALLED"
+      register: rootkit_check
+      changed_when: false
+    
+    - name: Check SELinux status
+      shell: getenforce 2>/dev/null || echo "SELinux: Not enabled"
+      register: selinux_status
+      changed_when: false
+    
+    - name: Display security audit report
+      debug:
+        msg: |
+          ========== SECURITY AUDIT REPORT ==========
+          Host: {{ inventory_hostname }}
+          
+          Ì¥• Firewall Status:
+          {{ firewall_status.stdout | default('Unable to determine') }}
+          
+          Ì¥ê SSH Configuration:
+          {{ ssh_config.stdout }}
+          
+          ‚öôÔ∏è SUID Binaries (sample):
+          {{ suid_binaries.stdout }}
+          
+          ‚ö†Ô∏è World-Writable Files:
+          {{ world_writable.stdout }}
+          
+          Ìª°Ô∏è Critical File Permissions:
+          {{ critical_perms.stdout }}
+          
+          Ì∂† Rootkit Detection Tool:
+          {{ rootkit_check.stdout }}
+          
+          Ì¥í SELinux Status:
+          {{ selinux_status.stdout }}
+

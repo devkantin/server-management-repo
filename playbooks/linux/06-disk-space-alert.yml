@@ -1,0 +1,67 @@
+---
+- name: Linux Disk Space Monitoring & Alerts
+  hosts: linux_servers
+  gather_facts: yes
+  vars:
+    disk_warning_threshold: 80
+    disk_critical_threshold: 90
+    inode_warning_threshold: 90
+  
+  tasks:
+    - name: Get disk usage per partition
+      shell: df -h | grep -vE "^Filesystem|tmpfs|squashfs"
+      register: disk_usage
+      changed_when: false
+    
+    - name: Get disk usage in percentage
+      shell: df -h | grep -vE "^Filesystem|tmpfs|squashfs" | awk '{print $6, $5}' | sed 's/%//'
+      register: disk_usage_percent
+      changed_when: false
+    
+    - name: Get inode usage
+      shell: df -i | grep -vE "^Filesystem|tmpfs|squashfs" | awk '{print $6, $5}' | sed 's/%//'
+      register: inode_usage
+      changed_when: false
+    
+    - name: Find large files/directories
+      shell: du -sh /* 2>/dev/null | sort -rh | head -15
+      register: large_directories
+      changed_when: false
+    
+    - name: Check for large log files
+      shell: find /var/log -type f -size +100M 2>/dev/null | head -10 || echo "None"
+      register: large_logs
+      changed_when: false
+    
+    - name: Check for large cache
+      shell: du -sh /var/cache 2>/dev/null || echo "N/A"
+      register: cache_size
+      changed_when: false
+    
+    - name: Display disk space report
+      debug:
+        msg: |
+          ========== DISK SPACE REPORT ==========
+          Host: {{ inventory_hostname }}
+          
+          í³Š Disk Usage Overview:
+          {{ disk_usage.stdout }}
+          
+          âš ï¸ Disk Usage by Partition:
+          {{ disk_usage_percent.stdout }}
+          
+          í²¾ Inode Usage:
+          {{ inode_usage.stdout }}
+          
+          í´ Top Directories by Size:
+          {{ large_directories.stdout }}
+          
+          í³„ Large Log Files (>100MB):
+          {{ large_logs.stdout }}
+          
+          í²« Cache Size (/var/cache):
+          {{ cache_size.stdout }}
+          
+          Warning Threshold: {{ disk_warning_threshold }}%
+          Critical Threshold: {{ disk_critical_threshold }}%
+
